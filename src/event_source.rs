@@ -66,11 +66,19 @@ pub struct EventSource {
 impl EventSource {
     /// Wrap a [`RequestBuilder`]
     pub fn new(builder: RequestBuilder) -> Result<Self, CannotCloneRequestError> {
+        Self::new_by_send_fn(builder, |builder| builder.send())
+    }
+
+    /// Wrap a [`RequestBuilder`] by providing an analogue to the RequestBuilder::send(self) function
+    pub fn new_by_send_fn<Fut: Future<Output = Result<Response, ReqwestError>> + Send + 'static>(
+        builder: RequestBuilder,
+        send_fn: impl Fn(RequestBuilder) -> Fut,
+    ) -> Result<Self, CannotCloneRequestError> {
         let builder = builder.header(
             reqwest::header::ACCEPT,
             HeaderValue::from_static("text/event-stream"),
         );
-        let res_future = Box::pin(builder.try_clone().ok_or(CannotCloneRequestError)?.send());
+        let res_future = Box::pin(send_fn(builder.try_clone().ok_or(CannotCloneRequestError)?));
         Ok(Self {
             builder,
             next_response: Some(res_future),
