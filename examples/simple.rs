@@ -6,10 +6,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut es = EventSource::get("http://localhost:8000/events");
     while let Some(event) = es.next().await {
         match event {
-            Ok(Event::Open) => println!("Connection Open!"),
-            Ok(Event::Message(message)) => println!("Message: {:#?}", message),
+            Ok(Event::Open(headers)) => {
+                println!("Connection Open! Headers: {headers:?}")
+            }
+            Ok(Event::Message(message)) => println!("Message: {message:#?}"),
             Err(err) => {
-                println!("Error: {}", err);
+                println!("Error: {err}");
                 // es.close();
             }
         }

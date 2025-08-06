@@ -16,7 +16,7 @@ use futures_core::stream::Stream;
 use futures_core::task::{Context, Poll};
 use futures_timer::Delay;
 use pin_project_lite::pin_project;
-use reqwest::header::{HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Error as ReqwestError, IntoUrl, RequestBuilder, Response, StatusCode};
 use std::time::Duration;
 
@@ -175,11 +175,13 @@ impl<'a> EventSourceProjection<'a> {
         Ok(())
     }
 
-    fn handle_response(&mut self, res: Response) {
+    fn handle_response(&mut self, mut res: Response) -> HeaderMap {
         self.last_retry.take();
+        let headers = std::mem::take(res.headers_mut());
         let mut stream = res.bytes_stream().eventsource();
         stream.set_last_event_id(self.last_event_id.clone());
         self.cur_stream.replace(Box::pin(stream));
+        headers
     }
 
     fn handle_event(&mut self, event: &MessageEvent) {
@@ -205,7 +207,7 @@ impl<'a> EventSourceProjection<'a> {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Event {
     /// The event fired when the connection is opened
-    Open,
+    Open(HeaderMap),
     /// The event fired when a [`MessageEvent`] is received
     Message(MessageEvent),
 }
@@ -245,8 +247,8 @@ impl Stream for EventSource {
                     this.clear_fetch();
                     match check_response(res) {
                         Ok(res) => {
-                            this.handle_response(res);
-                            return Poll::Ready(Some(Ok(Event::Open)));
+                            let headers = this.handle_response(res);
+                            return Poll::Ready(Some(Ok(Event::Open(headers))));
                         }
                         Err(err) => {
                             *this.is_closed = true;
